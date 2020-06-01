@@ -24,18 +24,14 @@ type Declaration struct {
 }
 
 var (
-	file        = flag.String("f", "", "the path to the file to outline")
-	importsOnly = flag.Bool("imports-only", false, "parse imports only")
-	modified    = flag.Bool("modified", false, "read an archive of the modified file from standard input")
+	file     = flag.String("f", "", "the path to the file to outline")
+	mode     = flag.Uint("mode", uint(parser.ParseComments), "go parser mode")
+	modified = flag.Bool("modified", false, "read an archive of the modified file from standard input")
 )
 
 func main() {
 	flag.Parse()
 	fset := token.NewFileSet()
-	parserMode := parser.ParseComments
-	if *importsOnly == true {
-		parserMode = parser.ImportsOnly
-	}
 
 	var fileAst *ast.File
 	var err error
@@ -49,9 +45,9 @@ func main() {
 		if !ok {
 			reportError(fmt.Errorf("couldn't find %s in archive", *file))
 		}
-		fileAst, err = parser.ParseFile(fset, *file, fc, parserMode)
+		fileAst, err = parser.ParseFile(fset, *file, fc, parser.Mode(*mode))
 	} else {
-		fileAst, err = parser.ParseFile(fset, *file, nil, parserMode)
+		fileAst, err = parser.ParseFile(fset, *file, nil, parser.Mode(*mode))
 	}
 
 	if err != nil {
