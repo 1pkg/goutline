@@ -38,13 +38,14 @@ The archive entry consists of:
 
 ### Schema
 
+Declarations are provided as flatten list, with
+artificial package declaration at list head.
+
 ```go
 type Declaration struct {
 	Label        string        `json:"label"`
 	Type         string        `json:"type"`
-	ReceiverType string        `json:"receiverType,omitempty"`
 	Start        token.Pos     `json:"start"`
 	End          token.Pos     `json:"end"`
-	Children     []Declaration `json:"children,omitempty"`
 }
 ```

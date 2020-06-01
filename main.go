@@ -1,12 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"go/ast"
-	"go/format"
 	"go/parser"
 	"go/token"
 	"log"
@@ -16,11 +13,10 @@ import (
 )
 
 type Declaration struct {
-	Label        string    `json:"label"`
-	Type         string    `json:"type"`
-	ReceiverType string    `json:"receiverType,omitempty"`
-	Start        token.Pos `json:"start"`
-	End          token.Pos `json:"end"`
+	Label string    `json:"label"`
+	Type  string    `json:"type"`
+	Start token.Pos `json:"start"`
+	End   token.Pos `json:"end"`
 }
 
 var (
@@ -53,60 +49,50 @@ func main() {
 
 	decls := []Declaration{
 		Declaration{
-			file.Name.String(),
-			"package",
-			"",
-			file.Pos(),
-			file.End(),
+			Label: file.Name.String(),
+			Type:  "package",
+			Start: file.Pos(),
+			End:   file.End(),
 		},
 	}
 
 	ast.Inspect(file, func(node ast.Node) bool {
 		switch decl := node.(type) {
 		case *ast.FuncDecl:
-			receiverType, err := getReceiverType(fset, decl)
-			if err != nil {
-				log.Printf("failed to parse receiver type %v", err)
-			}
 			decls = append(decls, Declaration{
-				decl.Name.String(),
-				"function",
-				receiverType,
-				decl.Pos(),
-				decl.End(),
+				Label: decl.Name.String(),
+				Type:  "function",
+				Start: decl.Pos(),
+				End:   decl.End(),
 			})
 		case *ast.GenDecl:
 			for _, spec := range decl.Specs {
 				switch spec := spec.(type) {
 				case *ast.ImportSpec:
 					decls = append(decls, Declaration{
-						spec.Path.Value,
-						"import",
-						"",
-						spec.Pos(),
-						spec.End(),
+						Label: spec.Path.Value,
+						Type:  "import",
+						Start: spec.Pos(),
+						End:   spec.End(),
 					})
 				case *ast.TypeSpec:
-					//TODO: Members if it's a struct or interface type?
 					decls = append(decls, Declaration{
-						spec.Name.String(),
-						"type",
-						"",
-						spec.Pos(),
-						spec.End(),
+						Label: spec.Name.String(),
+						Type:  "type",
+						Start: spec.Pos(),
+						End:   spec.End(),
 					})
 				case *ast.ValueSpec:
 					for _, id := range spec.Names {
-						varOrConst := "variable"
+						vc := "variable"
 						if decl.Tok == token.CONST {
-							varOrConst = "constant"
+							vc = "constant"
 						}
 						decls = append(decls, Declaration{
-							id.Name,
-							varOrConst,
-							"",
-							id.Pos(),
-							id.End(),
+							Label: id.Name,
+							Type:  vc,
+							Start: id.Pos(),
+							End:   id.End(),
 						})
 					}
 				default:
@@ -122,21 +108,8 @@ func main() {
 	})
 
 	if r, err := json.Marshal(decls); err == nil {
-		fmt.Println(string(r))
+		print(string(r))
 	} else {
 		log.Fatal(err)
 	}
-}
-
-func getReceiverType(fset *token.FileSet, decl *ast.FuncDecl) (string, error) {
-	if decl.Recv == nil {
-		return "", nil
-	}
-
-	buf := &bytes.Buffer{}
-	if err := format.Node(buf, fset, decl.Recv.List[0].Type); err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
 }
