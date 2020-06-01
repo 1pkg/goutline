@@ -9,6 +9,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"log"
 	"os"
 
 	"golang.org/x/tools/go/buildutil"
@@ -23,7 +24,7 @@ type Declaration struct {
 }
 
 var (
-	file     = flag.String("f", "", "the path to the file to outline")
+	fname    = flag.String("f", "", "the path to the file to outline")
 	mode     = flag.Uint("mode", uint(parser.ParseComments), "go parser mode")
 	modified = flag.Bool("modified", false, "read an archive of the modified file from standard input")
 )
@@ -32,43 +33,40 @@ func main() {
 	flag.Parse()
 	fset := token.NewFileSet()
 
-	var fileAst *ast.File
-	var err error
-
-	if *modified == true {
+	var src []byte
+	if *modified {
 		archive, err := buildutil.ParseOverlayArchive(os.Stdin)
 		if err != nil {
-			reportError(fmt.Errorf("failed to parse -modified archive: %v", err))
+			log.Printf("failed to parse -modified archive %v", err)
 		}
-		fc, ok := archive[*file]
+		fc, ok := archive[*fname]
 		if !ok {
-			reportError(fmt.Errorf("couldn't find %s in archive", *file))
+			log.Printf("couldn't find %s in archive", *fname)
 		}
-		fileAst, err = parser.ParseFile(fset, *file, fc, parser.Mode(*mode))
-	} else {
-		fileAst, err = parser.ParseFile(fset, *file, nil, parser.Mode(*mode))
+		src = fc
 	}
 
+	file, err := parser.ParseFile(fset, *fname, src, parser.Mode(*mode))
 	if err != nil {
-		reportError(fmt.Errorf("Could not parse file %s", *file))
+		log.Fatalf("could not parse file %s", *fname)
 	}
 
 	decls := []Declaration{
 		Declaration{
-			fileAst.Name.String(),
+			file.Name.String(),
 			"package",
 			"",
-			fileAst.Pos(),
-			fileAst.End(),
+			file.Pos(),
+			file.End(),
 		},
 	}
 
-	ast.Inspect(fileAst, func(node ast.Node) bool {
+	ast.Inspect(file, func(node ast.Node) bool {
 		switch decl := node.(type) {
 		case *ast.FuncDecl:
 			receiverType, err := getReceiverType(fset, decl)
 			if err != nil {
-				reportError(fmt.Errorf("Failed to parse receiver type: %v", err))
+				log.Printf("failed to parse receiver type %v", err)
 			}
 			decls = append(decls, Declaration{
 				decl.Name.String(),
@@ -112,19 +110,22 @@ func main() {
 						})
 					}
 				default:
-					reportError(fmt.Errorf("Unknown token type: %s", decl.Tok))
+					log.Printf("unknown token type %s", decl.Tok)
 					return false
 				}
 			}
 		default:
-			reportError(fmt.Errorf("Unknown declaration @ %v", decl.Pos()))
+			log.Printf("unknown declaration at %v", decl.Pos())
 			return false
 		}
 		return true
 	})
 
-	str, _ := json.Marshal(decls)
-	fmt.Println(string(str))
+	if r, err := json.Marshal(decls); err == nil {
+		fmt.Println(string(r))
+	} else {
+		log.Fatal(err)
+	}
 }
 
 func getReceiverType(fset *token.FileSet, decl *ast.FuncDecl) (string, error) {
@@ -138,8 +139,4 @@ func getReceiverType(fset *token.FileSet, decl *ast.FuncDecl) (string, error) {
 	}
 
 	return buf.String(), nil
-}
-
-func reportError(err error) {
-	fmt.Fprintln(os.Stderr, "error:", err)
 }
