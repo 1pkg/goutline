@@ -26,6 +26,7 @@ var (
 	fname    = flag.String("f", "", "the path to the file to outline")
 	mode     = flag.Uint("mode", uint(parser.ParseComments), "go parser mode")
 	modified = flag.Bool("modified", false, "read an archive of the modified file from standard input")
+	_        = flag.Bool("imports-only", false, "DEPRECATED: does nothing, kept only for backward compatibility")
 )
 
 func main() {
