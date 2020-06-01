@@ -31,6 +31,8 @@ var (
 func main() {
 	// parse flags
 	flag.Parse()
+	// set log output
+	log.SetOutput(os.Stderr)
 	// parse ast file
 	file := parse(parser.Mode(*mode), *modified)
 	// collect declarations
@@ -42,87 +44,89 @@ func main() {
 // parse parses ast file with mode and archive fallback
 func parse(mode parser.Mode, archive bool) *ast.File {
 	// try to get file source from build util archive
-	var arcsrc []byte
+	var src interface{}
 	if archive {
 		archive, err := buildutil.ParseOverlayArchive(os.Stdin)
 		if err != nil {
 			log.Printf("failed to parse -modified archive %v", err)
 		}
-		src, ok := archive[*fname]
+		asrc, ok := archive[*fname]
 		if !ok {
 			log.Printf("couldn't find %s in archive", *fname)
 		}
-		arcsrc = src
+		src = asrc
 	}
 	// parse file and handle errors
-	file, err := parser.ParseFile(token.NewFileSet(), *fname, arcsrc, mode)
+	file, err := parser.ParseFile(token.NewFileSet(), *fname, src, mode)
 	if err != nil {
-		log.Fatalf("could not parse file %s", *fname)
+		log.Fatalf("could not parse file %s %v", *fname, err)
 	}
 	return file
 }
 
 // inspect collects ast file declarations
 func inspect(file *ast.File) []Declaration {
-	// add artificial package declaration at top
-	decls := []Declaration{
-		Declaration{
-			Label: file.Name.String(),
-			Type:  "package",
-			Start: file.Pos(),
-			End:   file.End(),
-		},
-	}
 	// inspect deep ast file for known declarations
+	decls := make([]Declaration, 0)
 	ast.Inspect(file, func(node ast.Node) bool {
-		switch decl := node.(type) {
-		case *ast.FuncDecl:
-			decls = append(decls, Declaration{
-				Label: decl.Name.String(),
-				Type:  "function",
-				Start: decl.Pos(),
-				End:   decl.End(),
-			})
-		case *ast.GenDecl:
-			for _, spec := range decl.Specs {
-				switch spec := spec.(type) {
-				case *ast.ImportSpec:
-					decls = append(decls, Declaration{
-						Label: spec.Path.Value,
-						Type:  "import",
-						Start: spec.Pos(),
-						End:   spec.End(),
-					})
-				case *ast.TypeSpec:
-					decls = append(decls, Declaration{
-						Label: spec.Name.String(),
-						Type:  "type",
-						Start: spec.Pos(),
-						End:   spec.End(),
-					})
-				case *ast.ValueSpec:
-					for _, id := range spec.Names {
-						vc := "variable"
-						if decl.Tok == token.CONST {
-							vc = "constant"
-						}
+		if node != nil {
+			switch decl := node.(type) {
+			case *ast.File:
+				decls = append(decls, Declaration{
+					Label: decl.Name.String(),
+					Type:  "package",
+					Start: file.Pos(),
+					End:   file.End(),
+				})
+			case *ast.FuncDecl:
+				decls = append(decls, Declaration{
+					Label: decl.Name.String(),
+					Type:  "function",
+					Start: decl.Pos(),
+					End:   decl.End(),
+				})
+			case *ast.GenDecl:
+				for _, spec := range decl.Specs {
+					switch spec := spec.(type) {
+					case *ast.ImportSpec:
 						decls = append(decls, Declaration{
-							Label: id.Name,
-							Type:  vc,
-							Start: id.Pos(),
-							End:   id.End(),
+							Label: spec.Path.Value,
+							Type:  "import",
+							Start: spec.Pos(),
+							End:   spec.End(),
 						})
+					case *ast.TypeSpec:
+						decls = append(decls, Declaration{
+							Label: spec.Name.String(),
+							Type:  "type",
+							Start: spec.Pos(),
+							End:   spec.End(),
+						})
+					case *ast.ValueSpec:
+						for _, id := range spec.Names {
+							vc := "variable"
+							if decl.Tok == token.CONST {
+								vc = "constant"
+							}
+							decls = append(decls, Declaration{
+								Label: id.Name,
+								Type:  vc,
+								Start: id.Pos(),
+								End:   id.End(),
+							})
+						}
+					default:
+						log.Printf("unknown token type %s", decl.Tok)
+						return false
 					}
-				default:
-					log.Printf("unknown token type %s", decl.Tok)
-					return false
 				}
+			default:
+				log.Printf("unknown declaration at %v", decl.Pos())
+				return false
 			}
-		default:
-			log.Printf("unknown declaration at %v", decl.Pos())
-			return false
+			return true
 		}
-		return true
+		return false
 	})
 	return decls
 }
