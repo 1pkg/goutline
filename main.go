@@ -12,6 +12,8 @@ import (
 	"golang.org/x/tools/go/buildutil"
 )
 
+// Declaration defines DTO item
+// to carry and serialize go code declaration
 type Declaration struct {
 	Label string    `json:"label"`
 	Type  string    `json:"type"`
@@ -19,6 +21,7 @@ type Declaration struct {
 	End   token.Pos `json:"end"`
 }
 
+// collections of flags
 var (
 	fname    = flag.String("f", "", "the path to the file to outline")
 	mode     = flag.Uint("mode", uint(parser.ParseComments), "go parser mode")
@@ -26,27 +29,42 @@ var (
 )
 
 func main() {
+	// parse flags
 	flag.Parse()
-	fset := token.NewFileSet()
+	// parse ast file
+	file := parse(parser.Mode(*mode), *modified)
+	// collect declarations
+	decls := inspect(file)
+	// print declarations to stdouts
+	out(decls)
+}
 
-	var src []byte
-	if *modified {
+// parse parses ast file with mode and archive fallback
+func parse(mode parser.Mode, archive bool) *ast.File {
+	// try to get file source from build util archive
+	var arcsrc []byte
+	if archive {
 		archive, err := buildutil.ParseOverlayArchive(os.Stdin)
 		if err != nil {
 			log.Printf("failed to parse -modified archive %v", err)
 		}
-		fc, ok := archive[*fname]
+		src, ok := archive[*fname]
 		if !ok {
 			log.Printf("couldn't find %s in archive", *fname)
 		}
-		src = fc
+		arcsrc = src
 	}
-
-	file, err := parser.ParseFile(fset, *fname, src, parser.Mode(*mode))
+	// parse file and handle errors
+	file, err := parser.ParseFile(token.NewFileSet(), *fname, arcsrc, mode)
 	if err != nil {
 		log.Fatalf("could not parse file %s", *fname)
 	}
+	return file
+}
 
+// inspect collects ast file declarations
+func inspect(file *ast.File) []Declaration {
+	// add artificial package declaration at top
 	decls := []Declaration{
 		Declaration{
 			Label: file.Name.String(),
@@ -55,7 +73,7 @@ func main() {
 			End:   file.End(),
 		},
 	}
-
+	// inspect deep ast file for known declarations
 	ast.Inspect(file, func(node ast.Node) bool {
 		switch decl := node.(type) {
 		case *ast.FuncDecl:
@@ -106,10 +124,18 @@ func main() {
 		}
 		return true
 	})
+	return decls
+}
 
-	if r, err := json.Marshal(decls); err == nil {
-		print(string(r))
-	} else {
+// out writes declaration to std out
+func out(decls []Declaration) {
+	// serialize declarations to json
+	r, err := json.Marshal(decls)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// try to flush them to stdout
+	if _, err := os.Stdout.Write(r); err != nil {
 		log.Fatal(err)
 	}
 }
