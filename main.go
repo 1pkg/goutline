@@ -15,12 +15,11 @@ import (
 )
 
 type Declaration struct {
-	Label        string        `json:"label"`
-	Type         string        `json:"type"`
-	ReceiverType string        `json:"receiverType,omitempty"`
-	Start        token.Pos     `json:"start"`
-	End          token.Pos     `json:"end"`
-	Children     []Declaration `json:"children,omitempty"`
+	Label        string    `json:"label"`
+	Type         string    `json:"type"`
+	ReceiverType string    `json:"receiverType,omitempty"`
+	Start        token.Pos `json:"start"`
+	End          token.Pos `json:"end"`
 }
 
 var (
@@ -54,44 +53,49 @@ func main() {
 		reportError(fmt.Errorf("Could not parse file %s", *file))
 	}
 
-	declarations := []Declaration{}
+	decls := []Declaration{
+		Declaration{
+			fileAst.Name.String(),
+			"package",
+			"",
+			fileAst.Pos(),
+			fileAst.End(),
+		},
+	}
 
-	for _, decl := range fileAst.Decls {
-		switch decl := decl.(type) {
+	ast.Inspect(fileAst, func(node ast.Node) bool {
+		switch decl := node.(type) {
 		case *ast.FuncDecl:
 			receiverType, err := getReceiverType(fset, decl)
 			if err != nil {
 				reportError(fmt.Errorf("Failed to parse receiver type: %v", err))
 			}
-			declarations = append(declarations, Declaration{
+			decls = append(decls, Declaration{
 				decl.Name.String(),
 				"function",
 				receiverType,
 				decl.Pos(),
 				decl.End(),
-				[]Declaration{},
 			})
 		case *ast.GenDecl:
 			for _, spec := range decl.Specs {
 				switch spec := spec.(type) {
 				case *ast.ImportSpec:
-					declarations = append(declarations, Declaration{
+					decls = append(decls, Declaration{
 						spec.Path.Value,
 						"import",
 						"",
 						spec.Pos(),
 						spec.End(),
-						[]Declaration{},
 					})
 				case *ast.TypeSpec:
 					//TODO: Members if it's a struct or interface type?
-					declarations = append(declarations, Declaration{
+					decls = append(decls, Declaration{
 						spec.Name.String(),
 						"type",
 						"",
 						spec.Pos(),
 						spec.End(),
-						[]Declaration{},
 					})
 				case *ast.ValueSpec:
 					for _, id := range spec.Names {
@@ -99,36 +103,28 @@ func main() {
 						if decl.Tok == token.CONST {
 							varOrConst = "constant"
 						}
-						declarations = append(declarations, Declaration{
+						decls = append(decls, Declaration{
 							id.Name,
 							varOrConst,
 							"",
 							id.Pos(),
 							id.End(),
-							[]Declaration{},
 						})
 					}
 				default:
 					reportError(fmt.Errorf("Unknown token type: %s", decl.Tok))
+					return false
 				}
 			}
 		default:
 			reportError(fmt.Errorf("Unknown declaration @ %v", decl.Pos()))
+			return false
 		}
-	}
+		return true
+	})
 
-	pkg := []*Declaration{&Declaration{
-		fileAst.Name.String(),
-		"package",
-		"",
-		fileAst.Pos(),
-		fileAst.End(),
-		declarations,
-	}}
-
-	str, _ := json.Marshal(pkg)
+	str, _ := json.Marshal(decls)
 	fmt.Println(string(str))
-
 }
 
 func getReceiverType(fset *token.FileSet, decl *ast.FuncDecl) (string, error) {
