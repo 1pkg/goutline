@@ -116,12 +116,8 @@ func inspect(file *ast.File) []Declaration {
 								End:   id.End(),
 							})
 						}
-					default:
-						log.Printf("unknown token type %s", decl.Tok)
 					}
 				}
-			default:
-				log.Printf("unknown declaration at %v", decl.Pos())
 			}
 			return true
 		}

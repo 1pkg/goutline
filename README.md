@@ -1,4 +1,4 @@
-# Goutline
+# Goutline: Go AST Declaration Extractor
 
 Simple utility for extracting a JSON representation of the declarations,
 for any code scope nesting in a Go source file.
@@ -36,7 +36,7 @@ The archive entry consists of:
 - the (decimal) file size, followed by a newline
 - the contents of the file
 
-### Schema
+## Schema
 
 Declarations are provided as flatten list, with
 artificial package declaration at list head.
@@ -49,3 +49,8 @@ type Declaration struct {
 	End          token.Pos     `json:"end"`
 }
 ```
+
+## Licence
+
+Goutline is licensed under the MIT License.  
+See [LICENSE](LICENSE) for the full license text.
