@@ -97,9 +97,13 @@ func inspect(file *ast.File) []Declaration {
 							End:   spec.End(),
 						})
 					case *ast.TypeSpec:
+						tp := "type"
+						if _, ok := spec.Type.(*ast.StructType); ok {
+							tp = "struct"
+						}
 						decls = append(decls, Declaration{
 							Label: spec.Name.String(),
-							Type:  "type",
+							Type:  tp,
 							Start: spec.Pos(),
 							End:   spec.End(),
 						})
